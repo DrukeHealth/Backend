@@ -2,12 +2,17 @@ fastapi
 uvicorn
 pandas
 numpy
+scipy
 pillow
+opencv-python
 tensorflow
+scikit-learn
+imblearn
+joblib
 python-multipart
- opencv-python 
- scipy 
- pillow 
- joblib
- imblearn
- scikit-learn
+aiofiles
+python-dotenv
+requests
+cloudinary
+pymongo
+gunicorn
