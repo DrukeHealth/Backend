@@ -408,7 +408,7 @@ def classify_with_nyckel(image_path):
             files = {"file": f}
             headers = {"Authorization": f"Bearer {NYCKEL_KEY}"}
             print(f"[INFO] Sending image to Nyckel API...")
-            response = requests.post(NYCKEL_API_URL, headers=headers, files=files)
+            response = requests.post(NYCKEL_URL, headers=headers, files=files)
             print(f"[INFO] Nyckel status code: {response.status_code}")
 
             if response.status_code != 200:
