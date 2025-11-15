@@ -20,6 +20,8 @@ app.get("/", (_req, res) => res.json({ ok: true, service: "Zhiwa-CTG API" }));
 // app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/scans", scanRoutes);
+app.use("/api/postCTG", scanRoutes);
+
 app.use("/api/manage", managementRoutes);
 
 // Basic error handler
