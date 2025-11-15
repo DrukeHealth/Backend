@@ -7,7 +7,7 @@ const router = express.Router();
 const upload = multer({ storage });
 
 // 🟢 Route for uploading CTG image
-router.post("/postCTG", upload.single("ctgImage"), createScan);
+router.post("/", upload.single("ctgImage"), createScan);
 
 // 🟡 Route for listing all scans
 router.get("/scans", listScans);
