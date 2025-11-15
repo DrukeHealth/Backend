@@ -535,7 +535,15 @@ def compute_model_features(fhr_signal, uc_signal, time_axis):
 # ------------------------------
 @app.get("/")
 def home():
-    return {"message": "CTG AI Prediction API is running 🚀"}
+    routes = []
+    for route in app.routes:
+        if hasattr(route, "methods") and hasattr(route, "path"):
+            methods = list(route.methods)
+            routes.append({"path": route.path, "methods": methods})
+    return {
+        "message": "CTG AI Prediction API is running 🚀",
+        "available_endpoints": routes
+    }
 
 @app.post("/predict/")
 async def predict_ctg(file: UploadFile = File(...)):
