@@ -310,9 +310,8 @@
 
 NYCKEL_KEY = "eyJhbGciOiJSUzI1NiIsInR5cCI6ImF0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3d3dy5ueWNrZWwuY29tIiwibmJmIjoxNzYyODc5MzMxLCJpYXQiOjE3NjI4NzkzMzEsImV4cCI6MTc2Mjg4MjkzMSwic2NvcGUiOlsiYXBpIl0sImNsaWVudF9pZCI6Imh5Njl3dHN4ZG9vczkwbzg1NDJua3FmNTg2eXN2b2ZsIiwianRpIjoiQkRFNjJCMDhEOUUzNkUwNDgyNzYwQTdFQTdGMDQ1NjIifQ.hY7znBCxWQ-DSKTa6Ho8k6Tol6J1fiRrzR5bh-j8naTg_ltdm2Gg1PZthrI5PKTgmfWBXIeZndumXi4E8pNwQgVB595BJ9vDqTIsJb-y-yVVnOshq1JZa863HMeg0cn3emr0jpeAO6u5x9WLgdevAJmZDpdYh1qLNMKruZ2aD6MnVosM39o5ioGLucNqtzM4vqGiiHWiXVgZ5A-NWBGOTD8X1Kg1Y0hXv7GYakVtFC43uh90ptuk8FUsCA4BmJiZ14BDN9V_F-SPHsLO4afte10anxJFhEsEeoMvBB3j2U8COkTKGwnvnU3QA_DQCVYx9zoy3Q10JJQlkvmg2o9u_w"
 
-
 # ==========================================
-# server.py — Druk Health CTG AI Backend (FINAL)
+# server.py — Druk Health CTG AI Backend (Render-ready)
 # ==========================================
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -383,16 +382,11 @@ print("✅ Loaded Decision Tree model with features:\n", model_ctg_class.feature
 # ------------------------------
 # NYCKEL API
 # ------------------------------
-# NYCKEL_KEY = os.getenv("NYCKEL_API_KEY")
+NYCKEL_KEY = os.getenv("NYCKEL_API_KEY")
 NYCKEL_URL = "https://www.nyckel.com/v1/functions/cdk3y4u8ff799uh3/invoke"
 
 def classify_with_nyckel(image_path):
-    """
-    Sends the CTG image to Nyckel API and returns the prediction.
-    Handles PNG→JPEG conversion automatically and logs responses.
-    """
     tmp_path = image_path
-    # Convert PNG to JPEG if needed
     if image_path.lower().endswith(".png"):
         tmp_path = image_path.replace(".png", ".jpg")
         try:
@@ -400,40 +394,26 @@ def classify_with_nyckel(image_path):
                 im.convert("RGB").save(tmp_path, format="JPEG")
             print(f"[INFO] Converted PNG → JPEG: {tmp_path}")
         except Exception as e:
-            print(f"[ERROR] Failed to convert PNG to JPEG: {e}")
-            tmp_path = image_path  # fallback
+            print(f"[ERROR] Failed PNG→JPEG conversion: {e}")
+            tmp_path = image_path
 
     try:
         with open(tmp_path, "rb") as f:
             files = {"file": f}
             headers = {"Authorization": f"Bearer {NYCKEL_KEY}"}
-            print(f"[INFO] Sending image to Nyckel API...")
-            response = requests.post(NYCKEL_URL, headers=headers, files=files)
-            print(f"[INFO] Nyckel status code: {response.status_code}")
-
-            if response.status_code != 200:
-                print(f"[ERROR] Nyckel API response: {response.text}")
-                return {"labelName": "Unknown", "confidence": None}
-
+            response = requests.post(NYCKEL_URL, headers=headers, files=files, timeout=15)
+            response.raise_for_status()
             nyckel_result = response.json()
-            print(f"[SUCCESS] Nyckel API response: {nyckel_result}")
-
-            # Ensure labelName exists
             if "labelName" not in nyckel_result:
                 nyckel_result["labelName"] = "Unknown"
                 nyckel_result["confidence"] = None
-
             return nyckel_result
-
     except Exception as e:
         print(f"[ERROR] Nyckel API failed: {e}")
         return {"labelName": "Unknown", "confidence": None}
-
     finally:
         if tmp_path != image_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
-            print(f"[INFO] Deleted temporary file {tmp_path}")
-
 
 # ------------------------------
 # CTG Signal Extraction
@@ -555,13 +535,13 @@ def compute_model_features(fhr_signal, uc_signal, time_axis):
 @app.get("/")
 def home():
     return {"message": "CTG AI Prediction API is running 🚀"}
+
 @app.post("/predict/")
 async def predict_ctg(file: UploadFile = File(...)):
     contents = await file.read()
     tmp_path = None
 
     try:
-        # Save uploaded file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             tmp.write(contents)
             tmp_path = tmp.name
@@ -573,28 +553,11 @@ async def predict_ctg(file: UploadFile = File(...)):
         local_pred = model_ctg_class.predict(df)[0]
         local_label = {1: "Normal", 2: "Suspect", 3: "Pathologic"}.get(local_pred, "Unknown")
 
-        # --- Step 2: Call Nyckel API ---
-        nyckel_data = {}
-        try:
-            headers = {"Authorization": f"Bearer {NYCKEL_KEY}"}
-            with open(tmp_path, "rb") as f:
-                response = requests.post(
-                    NYCKEL_URL,
-                    files={"data": ("image.jpg", f, "image/jpeg")},
-                    headers=headers,
-                    timeout=15
-                )
-                response.raise_for_status()
-                nyckel_data = response.json()
-                print("[INFO] Nyckel response:", nyckel_data)
-        except Exception as e:
-            print("❌ Nyckel API failed:", e)
-            nyckel_data = {"labelName": "CTG fallback"}
-
-        # Determine if Nyckel thinks it’s a CTG
+        # --- Step 2: Nyckel API ---
+        nyckel_data = classify_with_nyckel(tmp_path)
         nyckel_label = nyckel_data.get("labelName", "CTG").lower()
+
         if nyckel_label != "ctg":
-            # Not a CTG
             return {
                 "nyckel_prediction": nyckel_data,
                 "local_prediction": None,
@@ -618,7 +581,7 @@ async def predict_ctg(file: UploadFile = File(...)):
         }
         result = ctg_collection.insert_one(record)
 
-        # --- Step 5: Return all results ---
+        # --- Step 5: Return results ---
         return {
             "nyckel_prediction": nyckel_data,
             "local_prediction": {"label": local_label, "prediction": int(local_pred)},
@@ -633,12 +596,11 @@ async def predict_ctg(file: UploadFile = File(...)):
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
-# -------------------------------------------------------
-# GET ALL RECORDS
-# -------------------------------------------------------
+# ------------------------------
+# Records Routes
+# ------------------------------
 @app.get("/records")
 def get_records():
-    """Return all stored CTG scan records (with image + features only)."""
     try:
         records = list(ctg_collection.find().sort("timestamp", -1))
         formatted = []
@@ -654,7 +616,6 @@ def get_records():
         return {"records": formatted}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.delete("/records/{record_id}")
 def delete_record(record_id: str):
@@ -694,3 +655,4 @@ def get_analysis():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
